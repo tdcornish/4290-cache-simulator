@@ -38,6 +38,7 @@ typedef struct cache_block{
 
     bool valid;
     bool dirty;
+    bool prefetched;
 }block;
 
 void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats);
@@ -52,6 +53,8 @@ bool checkVC(uint64_t tag, uint64_t index, block** foundBlock);
 void swap(block* first, block* second);
 void putInVictimCache(block* toInsert);
 void printBlock(block* toPrint);
+int prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize);
+int minTimestamp(block* set);
 
 static const uint64_t DEFAULT_C = 15;   /* 32KB Cache */
 static const uint64_t DEFAULT_B = 5;    /* 32-byte blocks */
@@ -71,11 +74,16 @@ uint64_t offsetMask;
 uint64_t indexMask;
 uint64_t tagMask;
 
+uint64_t lastMissAddress;
+uint64_t d;
+int pendingStride;
+
 int totalBytes;
 int bytesPerBlock;
 int blocksPerSet;
 int totalRows;
 int victimCacheSize;
+int prefetchSize;
 
 int offsetBits;
 int indexBits;

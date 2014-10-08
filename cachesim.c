@@ -13,6 +13,8 @@
  */
 
 void setup_cache(uint64_t c, uint64_t b, uint64_t s, uint64_t v, uint64_t k) {
+    pendingStride = 0;
+    lastMissAddress = 0;
     writeBacks = 0;
     counter = 0;
     vcCounter = 0;
@@ -21,6 +23,7 @@ void setup_cache(uint64_t c, uint64_t b, uint64_t s, uint64_t v, uint64_t k) {
     blocksPerSet = pow(2, s);
 
     hit_time = 2 + 0.2 * s;
+    prefetchSize = k;
 
     if(c - b == s){
         fullyAssociative = true;
@@ -49,6 +52,7 @@ void setup_cache(uint64_t c, uint64_t b, uint64_t s, uint64_t v, uint64_t k) {
         for(int j = 0; j < blocksPerSet; j++){
             cache[i][j].valid = false;
             cache[i][j].dirty = false;
+            cache[i][j].prefetched = false;
         }
     }
 
@@ -57,6 +61,7 @@ void setup_cache(uint64_t c, uint64_t b, uint64_t s, uint64_t v, uint64_t k) {
     for(int i = 0; i < victimCacheSize; i++){
         victimCache[i].valid = false;
         victimCache[i].dirty = false;
+        victimCache[i].prefetched = false;
     }
 }
 /**
@@ -127,6 +132,7 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
             blockToReplace->offset = offset;
             blockToReplace->timestamp = counter++;
             blockToReplace->valid = true;
+            blockToReplace->prefetched = false;
 
             if(rw == WRITE){
                 blockToReplace->dirty = true;
@@ -134,7 +140,18 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
             else{
                 blockToReplace->dirty = false;
             }
+        }
 
+        if(prefetchSize > 0){
+            uint64_t blockAddrX = address & ~offsetMask;
+            d = blockAddrX - lastMissAddress;
+            lastMissAddress = blockAddrX;
+
+            if(d == pendingStride){
+                p_stats->prefetched_blocks += prefetch(blockAddrX, pendingStride,  prefetchSize);
+            }
+
+            pendingStride = d;
         }
     }
     else{
@@ -159,7 +176,7 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
 void complete_cache(struct cache_stats_t *p_stats) {
     p_stats->misses = p_stats->write_misses + p_stats->read_misses;
     p_stats->write_backs = writeBacks;
-    p_stats->bytes_transferred = p_stats->misses * 32 + p_stats->write_backs * 32;
+    p_stats->bytes_transferred = (p_stats->prefetched_blocks + p_stats->vc_misses + p_stats->write_backs) * 32;
     p_stats->hit_time = hit_time;
     p_stats->miss_penalty = 200;
     p_stats->miss_rate = (double)(p_stats->misses)/(p_stats->accesses);
@@ -176,6 +193,60 @@ void complete_cache(struct cache_stats_t *p_stats) {
         free(cache[i]);
     }
     free(cache);
+}
+
+int prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize){
+    int numberOfBlocksPrefetched = 0;
+    for(int i = 1; i <= prefetchSize; i++){
+        numberOfBlocksPrefetched++;
+        uint64_t address = blockAddr + i * pendingStride;
+        uint64_t index = (address & indexMask) >> offsetBits;
+        uint64_t tag = (address & tagMask) >> (offsetBits + indexBits);
+
+        block* set;
+        if(fullyAssociative){
+            set = cache[0];
+        }
+        else{
+            set = cache[index];
+        }
+
+        block* foundBlock = (block*)malloc(sizeof(block));
+        bool mainCacheHit = matchTag(set, tag, &foundBlock);
+
+        if(!mainCacheHit){
+            block* vcBlock = (block*)malloc(sizeof(block));
+            bool victimCacheHit;
+            victimCacheHit = checkVC(tag, index, &vcBlock);
+
+            block* blockToReplace = getLRUBlock(set);
+
+            if(victimCacheHit){
+                swap(blockToReplace, vcBlock);
+                vcBlock->timestamp = blockToReplace->timestamp;
+                blockToReplace->timestamp = minTimestamp(set) - 1;
+                blockToReplace->prefetched = true;
+            }
+            else{
+                if(blockToReplace->valid){
+                    putInVictimCache(blockToReplace);
+                }
+
+                if(victimCacheSize == 0 && blockToReplace->dirty){
+                    writeBack(blockToReplace);
+                }
+
+                blockToReplace->tag = tag;
+                blockToReplace->index = index;
+                blockToReplace->timestamp = minTimestamp(set) - 1;
+                blockToReplace->valid = true;
+                blockToReplace->prefetched = true;
+                blockToReplace->dirty = false;
+            }
+        }
+    }
+
+    return numberOfBlocksPrefetched;
 }
 
 void calculateMasks(int offsetBits, int indexBits, int tagBits){
@@ -219,7 +290,7 @@ block* getLRUBlock(block* set){
         if(currentBlockTimestamp < lruTimestamp){
             lruEntry = &set[i];
             lruTimestamp = currentBlockTimestamp;
-    //        location = i;
+            //        location = i;
         }
     }
 
@@ -321,4 +392,15 @@ void swap(block* first, block* second){
     memcpy(temp, first, sizeof(block));
     memcpy(first, second, sizeof(block));
     memcpy(second, temp, sizeof(block));
+}
+
+int minTimestamp(block* set){
+    int lowestTimestamp = set[0].timestamp;
+    for(int i = 1; i < blocksPerSet; i++){
+        if(set[i].timestamp < lowestTimestamp){
+            lowestTimestamp = set[i].timestamp;
+        }
+    }
+
+    return lowestTimestamp;
 }
