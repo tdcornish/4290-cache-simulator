@@ -70,6 +70,7 @@ void setup_cache(uint64_t c, uint64_t b, uint64_t s, uint64_t v, uint64_t k) {
 void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
     p_stats->accesses++;
     (rw == READ) ? p_stats->reads++ : p_stats->writes++;
+    //printf("access\n");
 
     uint64_t index = (address & indexMask) >> offsetBits;
     uint64_t tag = (address & tagMask) >> (offsetBits + indexBits);
@@ -129,6 +130,9 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
 
             if(rw == WRITE){
                 blockToReplace->dirty = true;
+            }
+            else{
+                blockToReplace->dirty = false;
             }
 
         }
@@ -209,14 +213,17 @@ block* getLRUBlock(block* set){
 
     block* lruEntry = &set[0];
     uint64_t lruTimestamp = lruEntry->timestamp;
+    //int location;
     for(int i = 1; i< blocksPerSet; i++){
         uint64_t currentBlockTimestamp = set[i].timestamp;
         if(currentBlockTimestamp < lruTimestamp){
-            //printf("block %d replaced\n", i);
             lruEntry = &set[i];
             lruTimestamp = currentBlockTimestamp;
+    //        location = i;
         }
     }
+
+    //printf("block %d replaced %llx\n", location, lruEntry->tag);
 
     return lruEntry;
 }
@@ -289,7 +296,7 @@ void putInVictimCache(block* toInsert){
 }
 
 void writeBack(block* block){
-    //printf("write back\n");
+    //printf("write back: %llx\n", block->tag);
     block->dirty = false;
     writeBacks++;
 }
@@ -297,11 +304,11 @@ void writeBack(block* block){
 void printSet(block* set, int index){
     printf("Set %d: ", index);
     for(int i=0; i < blocksPerSet; i++){
-        printf("%llx:%lld ", set[i].tag, set[i].timestamp);
+        printf("%llx ", set[i].tag);
     }
     printf("\n");
     for(int i = 0; i<victimCacheSize; i++){
-        printf("%llx, %lld\n", victimCache[i].tag, victimCache[i].timestamp);
+        printf("%llx, %llu\n", victimCache[i].tag, victimCache[i].index);
     }
 }
 
