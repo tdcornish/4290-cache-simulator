@@ -53,7 +53,7 @@ bool checkVC(uint64_t tag, uint64_t index, block** foundBlock);
 void swap(block* first, block* second);
 void putInVictimCache(block* toInsert);
 void printBlock(block* toPrint);
-int prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize);
+void prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize);
 int minTimestamp(block* set);
 
 static const uint64_t DEFAULT_C = 15;   /* 32KB Cache */
@@ -75,7 +75,7 @@ uint64_t indexMask;
 uint64_t tagMask;
 
 uint64_t lastMissAddress;
-uint64_t d;
+int64_t d;
 int pendingStride;
 
 int totalBytes;

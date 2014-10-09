@@ -75,15 +75,10 @@ void setup_cache(uint64_t c, uint64_t b, uint64_t s, uint64_t v, uint64_t k) {
 void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
     p_stats->accesses++;
     (rw == READ) ? p_stats->reads++ : p_stats->writes++;
-    //printf("access\n");
 
     uint64_t index = (address & indexMask) >> offsetBits;
     uint64_t tag = (address & tagMask) >> (offsetBits + indexBits);
     uint64_t offset = (address & offsetMask);
-
-    //printf("tagMask %llx\n", tagMask);
-    //printf("indexMask %llx\n", indexMask);
-    //printf("%c address: %llx, index: %llu, tag: %llx\n", rw, address, index, tag);
 
     block* set;
     if(fullyAssociative){
@@ -148,7 +143,8 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
             lastMissAddress = blockAddrX;
 
             if(d == pendingStride){
-                p_stats->prefetched_blocks += prefetch(blockAddrX, pendingStride,  prefetchSize);
+                p_stats->prefetched_blocks += prefetchSize;
+                prefetch(blockAddrX, pendingStride,  prefetchSize);
             }
 
             pendingStride = d;
@@ -161,9 +157,6 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
             foundBlock->dirty = true;
         }
     }
-
-    //printSet(set, index);
-    //printf("\n\n");
 }
 
 /**
@@ -195,10 +188,8 @@ void complete_cache(struct cache_stats_t *p_stats) {
     free(cache);
 }
 
-int prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize){
-    int numberOfBlocksPrefetched = 0;
+void prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize){
     for(int i = 1; i <= prefetchSize; i++){
-        numberOfBlocksPrefetched++;
         uint64_t address = blockAddr + i * pendingStride;
         uint64_t index = (address & indexMask) >> offsetBits;
         uint64_t tag = (address & tagMask) >> (offsetBits + indexBits);
@@ -245,8 +236,6 @@ int prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize){
             }
         }
     }
-
-    return numberOfBlocksPrefetched;
 }
 
 void calculateMasks(int offsetBits, int indexBits, int tagBits){
@@ -277,25 +266,19 @@ void calculateMasks(int offsetBits, int indexBits, int tagBits){
 block* getLRUBlock(block* set){
     for(int i = 0; i < blocksPerSet; i++){
         if(!set[i].valid){
-            //printf("block %d filled\n", i);
             return &set[i];
         }
     }
 
     block* lruEntry = &set[0];
     uint64_t lruTimestamp = lruEntry->timestamp;
-    //int location;
     for(int i = 1; i< blocksPerSet; i++){
         uint64_t currentBlockTimestamp = set[i].timestamp;
         if(currentBlockTimestamp < lruTimestamp){
             lruEntry = &set[i];
             lruTimestamp = currentBlockTimestamp;
-            //        location = i;
         }
     }
-
-    //printf("block %d replaced %llx\n", location, lruEntry->tag);
-
     return lruEntry;
 }
 
@@ -306,7 +289,6 @@ bool matchTag(block* set, uint64_t tag, block** foundBlock){
         block entry = set[i];
         if(entry.valid && entry.tag == tag){
             found = true;
-            //printf("matched tag %llx block %d\n", entry.tag, i);
             *foundBlock = &set[i];
         }
 
@@ -325,7 +307,6 @@ bool checkVC(uint64_t tag, uint64_t index, block** foundBlock){
         block entry = victimCache[i];
         if(entry.valid && entry.index == index && entry.tag == tag){
             *foundBlock = &victimCache[i];
-            //printf("victim matched tag %llx block %d\n", victimCache[i].tag, i);
             return true;
         }
     }
@@ -367,7 +348,6 @@ void putInVictimCache(block* toInsert){
 }
 
 void writeBack(block* block){
-    //printf("write back: %llx\n", block->tag);
     block->dirty = false;
     writeBacks++;
 }
@@ -375,7 +355,7 @@ void writeBack(block* block){
 void printSet(block* set, int index){
     printf("Set %d: ", index);
     for(int i=0; i < blocksPerSet; i++){
-        printf("%llx ", set[i].tag);
+        printf("%llx:%lld ", set[i].tag, set[i].timestamp);
     }
     printf("\n");
     for(int i = 0; i<victimCacheSize; i++){
@@ -395,9 +375,9 @@ void swap(block* first, block* second){
 }
 
 int minTimestamp(block* set){
-    int lowestTimestamp = set[0].timestamp;
-    for(int i = 1; i < blocksPerSet; i++){
-        if(set[i].timestamp < lowestTimestamp){
+    int lowestTimestamp = 2;
+    for(int i = 0; i < blocksPerSet; i++){
+        if(set[i].timestamp < lowestTimestamp && set[i].valid){
             lowestTimestamp = set[i].timestamp;
         }
     }
