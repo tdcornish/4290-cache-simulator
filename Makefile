@@ -1,4 +1,4 @@
-CFLAGS=-g -Wall -std=c11 -lm
+CFLAGS=-g -Wall -std=c99 -lm
 CC=gcc
 
 all: cachesim
