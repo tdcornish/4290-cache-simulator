@@ -108,6 +108,12 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
             if(rw == WRITE){
                 blockToReplace->dirty = true;
             }
+
+            if(foundBlock->prefetched){
+                p_stats->useful_prefetches++;
+                foundBlock->prefetched = false;
+            }
+
         }
         else{
             //L1 and VC miss
@@ -155,6 +161,11 @@ void cache_access(char rw, uint64_t address, struct cache_stats_t* p_stats) {
 
         if(rw == WRITE){
             foundBlock->dirty = true;
+        }
+
+        if(foundBlock->prefetched){
+            p_stats->useful_prefetches++;
+            foundBlock->prefetched = false;
         }
     }
 }
