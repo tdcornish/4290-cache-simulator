@@ -1,6 +1,11 @@
 #include "cachesim.h"
 
 /**
+ * Thomas Cornish
+ * Project 1
+ */
+
+/**
  * Subroutine for initializing the cache. You many add and initialize any global or heap
  * variables as needed.
  * XXX: You're responsible for completing this routine
@@ -199,6 +204,9 @@ void complete_cache(struct cache_stats_t *p_stats) {
     free(cache);
 }
 
+/**
+ * Prefetches prefetchSize amount of blocks according to the pendingStride and blockAddr.
+ */
 void prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize){
     for(int i = 1; i <= prefetchSize; i++){
         uint64_t address = blockAddr + i * pendingStride;
@@ -249,6 +257,10 @@ void prefetch(uint64_t blockAddr, int pendingStride, int prefetchSize){
     }
 }
 
+/**
+ * Calculates the necessary masks to isolate the tag, index, and offset bits.
+ * Stores them in global offsetMask, indexMask, and tagMask.
+ */
 void calculateMasks(int offsetBits, int indexBits, int tagBits){
     int currentBit = 1;
     offsetMask = 0;
@@ -274,6 +286,9 @@ void calculateMasks(int offsetBits, int indexBits, int tagBits){
 
 }
 
+/**
+ * Finds the first invalid block or least recently used block and returns a pointer to said block.
+ */
 block* getLRUBlock(block* set){
     for(int i = 0; i < blocksPerSet; i++){
         if(!set[i].valid){
@@ -293,6 +308,11 @@ block* getLRUBlock(block* set){
     return lruEntry;
 }
 
+/**
+ * Checks the cache line for the appropriate tag.
+ * Returns true on match, false otherwise.
+ * If there is a match, the foundBlock pointer will point to the matching block on return.
+ */
 bool matchTag(block* set, uint64_t tag, block** foundBlock){
     bool found = false;
     int i=0;
@@ -309,6 +329,11 @@ bool matchTag(block* set, uint64_t tag, block** foundBlock){
     return found;
 }
 
+/**
+ * Check the victim cache for the tag+index combo.
+ * Returns true on match, false otherwise.
+ * If there is a match, the foundBlock pointer will point to the matching block on return.
+ */
 bool checkVC(uint64_t tag, uint64_t index, block** foundBlock){
     if(victimCacheSize == 0){
         return false;
@@ -324,6 +349,9 @@ bool checkVC(uint64_t tag, uint64_t index, block** foundBlock){
     return false;
 }
 
+/**
+ * Inserts the block into the appropriate place in the victim cache
+ */
 void putInVictimCache(block* toInsert){
     if(victimCacheSize > 0){
         bool emptyBlockFound = false;
@@ -358,11 +386,17 @@ void putInVictimCache(block* toInsert){
     }
 }
 
+/**
+ * Writeback the block.
+ */
 void writeBack(block* block){
     block->dirty = false;
     writeBacks++;
 }
 
+/**
+ * prints the cacheline.
+ */
 void printSet(block* set, int index){
     printf("Set %d: ", index);
     for(int i=0; i < blocksPerSet; i++){
@@ -374,10 +408,16 @@ void printSet(block* set, int index){
     }
 }
 
+/**
+ * Prints all members of a block.
+ */
 void printBlock(block* toPrint){
     printf("tag: %llx\nindex: %llx\noffset: %lld\ntimestamp: %llu\n", toPrint->tag, toPrint->index, toPrint->offset, toPrint->timestamp);
 }
 
+/**
+ * Swaps two blocks.
+ */
 void swap(block* first, block* second){
     block* temp = (block*)malloc(sizeof(block));
     memcpy(temp, first, sizeof(block));
@@ -385,6 +425,9 @@ void swap(block* first, block* second){
     memcpy(second, temp, sizeof(block));
 }
 
+/**
+ * Returns the lowest timestamp from a cacheline.
+ */
 int minTimestamp(block* set){
     int lowestTimestamp = 2;
     for(int i = 0; i < blocksPerSet; i++){
